@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NO_COLOR: "1"
+      FORCE_COLOR: ""
 
     steps:
       - name: Checkout repository
