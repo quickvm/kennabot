@@ -54,16 +54,6 @@ jobs:
       - name: Run tests
         run: uv run pytest tests/ -v --tb=short
 
-      - name: Test summary
-        if: always()
-        run: |
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "All tests passed!"
-          else
-            echo "Tests failed — container will not be built"
-            exit 1
-          fi
-
   build-and-push:
     name: Build and Push Container
     needs: test
