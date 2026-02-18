@@ -1,0 +1,128 @@
+name: KennaBot CI
+
+on:
+  pull_request: # Run tests on all PRs
+  push:
+    branches:
+      - master
+  workflow_dispatch: # Allow manual triggering
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: quickvm/kennabot
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Cache uv dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            .venv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/uv.lock', '**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Setup test environment
+        run: cp .env.example .env
+
+      - name: Lint
+        run: uv run ruff check src/ tests/
+
+      - name: Type check
+        run: uv run ty check src/ tests/
+
+      - name: Run tests
+        run: uv run pytest tests/ -v --tb=short
+
+      - name: Test summary
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "All tests passed!"
+          else
+            echo "Tests failed — container will not be built"
+            exit 1
+          fi
+
+  build-and-push:
+    name: Build and Push Container
+    needs: test
+    runs-on: ubuntu-latest
+    # Only push on merge to master, not on PRs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=short
+            type=sha,format=short,prefix={{branch}}-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+
+      - name: Display image tags
+        run: |
+          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "Tags:"
+          echo "${{ steps.meta.outputs.tags }}" | sed 's/^/  - /'
+
+      - name: Build and push container image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          cache-from: type=gha,scope=kennabot
+          cache-to: type=gha,mode=max,scope=kennabot
+
+      - name: Build summary
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "Container built and pushed successfully!"
+          echo "Image:  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "Commit: ${SHORT_SHA}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Tags:"
+          echo "${{ steps.meta.outputs.tags }}" | sed 's/^/  - /'

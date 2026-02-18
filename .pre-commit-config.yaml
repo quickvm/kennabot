@@ -1,0 +1,38 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff lint
+        language: system
+        entry: uv run ruff check
+        args: [src/, tests/]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: ruff-format
+        name: ruff format check
+        language: system
+        entry: uv run ruff format
+        args: [--check, src/, tests/]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: ty
+        name: ty type check
+        language: system
+        entry: uv run ty check
+        args: [src/, tests/]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: pytest
+        name: pytest
+        language: system
+        entry: uv run pytest
+        args: [tests/, -q, --tb=short]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
