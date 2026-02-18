@@ -18,6 +18,7 @@ jobs:
     env:
       NO_COLOR: "1"
       FORCE_COLOR: ""
+      _TYPER_FORCE_DISABLE_TERMINAL: "1"
 
     steps:
       - name: Checkout repository

@@ -13,6 +13,7 @@ from sqlmodel import SQLModel
 
 os.environ.pop("FORCE_COLOR", None)
 os.environ["NO_COLOR"] = "1"
+os.environ["_TYPER_FORCE_DISABLE_TERMINAL"] = "1"
 
 
 @pytest.fixture(scope="session")
