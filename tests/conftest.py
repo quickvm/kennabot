@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlmodel import SQLModel
 
 os.environ.pop("FORCE_COLOR", None)
+os.environ["NO_COLOR"] = "1"
 
 
 @pytest.fixture(scope="session")
