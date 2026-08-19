@@ -6,7 +6,6 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from kennabot.plugins.base import BasePlugin
-from kennabot.plugins.plusplus.handlers import PlusPlusHandlers
 
 if TYPE_CHECKING:
     from slack_bolt.async_app import AsyncApp
@@ -43,6 +42,10 @@ class PlusPlusPlugin(BasePlugin):
         settings: Settings,
     ) -> None:
         """Register message listeners and slash commands on the Bolt app."""
+        # Keep this import lazy: plugin discovery imports this module for every
+        # CLI invocation, and handlers pulls in sqlalchemy/sqlmodel (~1.2s).
+        from kennabot.plugins.plusplus.handlers import PlusPlusHandlers
+
         handlers = PlusPlusHandlers(session_factory, settings)
 
         @app.event("message")

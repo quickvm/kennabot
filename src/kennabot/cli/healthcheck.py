@@ -50,17 +50,26 @@ def healthcheck(
         kennabot healthcheck
         kennabot healthcheck --port 9090
     """
-    import httpx
+    # Deliberately stdlib rather than httpx: this runs as the container health
+    # check every HealthInterval, and importing httpx costs ~0.9s per probe.
+    import urllib.error
+    import urllib.request
 
     url = f"http://{host}:{port}{path}"
     try:
-        response = httpx.get(url, timeout=timeout)
-        if response.status_code == 200:
-            typer.echo(f"healthy: {response.text.strip()}")
-            raise typer.Exit(0)
-        else:
-            typer.echo(f"unhealthy: HTTP {response.status_code}", err=True)
-            raise typer.Exit(1)
-    except httpx.RequestError as exc:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            status = response.status
+            body = response.read().decode("utf-8", errors="replace").strip()
+    except urllib.error.HTTPError as exc:
+        typer.echo(f"unhealthy: HTTP {exc.code}", err=True)
+        sys.exit(1)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
         typer.echo(f"unhealthy: {exc}", err=True)
         sys.exit(1)
+
+    if status == 200:
+        typer.echo(f"healthy: {body}")
+        raise typer.Exit(0)
+
+    typer.echo(f"unhealthy: HTTP {status}", err=True)
+    raise typer.Exit(1)
