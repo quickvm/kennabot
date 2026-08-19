@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import signal
 
 from kennabot.app import create_bolt_app, create_fastapi_app, start_socket_mode
 from kennabot.config import get_settings
@@ -72,18 +73,36 @@ async def run(
         effective_port,
     )
 
+    loop = asyncio.get_running_loop()
+    shutdown_event = asyncio.Event()
+
+    def _handle_signal(sig: int) -> None:
+        logger.info("Received signal %s, initiating shutdown...", signal.Signals(sig).name)
+        shutdown_event.set()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, _handle_signal, sig)
+
     # Create tasks
     socket_mode_task = asyncio.create_task(run_socket_mode())
     uvicorn_task = asyncio.create_task(run_uvicorn())
 
-    # Wait for both, but handle cancellation gracefully
     try:
-        await asyncio.gather(socket_mode_task, uvicorn_task)
-    except asyncio.CancelledError:
+        # Run until a shutdown signal is received or a task exits unexpectedly.
+        done, pending = await asyncio.wait(
+            [socket_mode_task, uvicorn_task, asyncio.create_task(shutdown_event.wait())],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in done:
+            exc = task.exception() if not task.cancelled() else None
+            if exc:
+                logger.error("Task exited with error: %s", exc)
+    finally:
         logger.info("Shutting down KennaBot...")
+        uvicorn_server.should_exit = True
         socket_mode_task.cancel()
         uvicorn_task.cancel()
+        await asyncio.gather(socket_mode_task, uvicorn_task, return_exceptions=True)
         await handler.close_async()
-        uvicorn_server.should_exit = True
         await close_db()
         logger.info("KennaBot stopped")
